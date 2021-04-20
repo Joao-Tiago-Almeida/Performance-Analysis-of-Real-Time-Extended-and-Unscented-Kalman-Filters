@@ -18,7 +18,7 @@ Estimated_vx = zeros(size(odomx,1),1);
 Estimated_vy = zeros(size(odomy,1),1); 
 true_ax = zeros(size(odomx,1),1); 
 true_ay = zeros(size(odomy,1),1);
-
+% 
 % [true_ax,Estimated_vx] = Get_prop(x_true);
 % [true_ay,Estimated_vy] = Get_prop(y_true);
 
@@ -34,7 +34,7 @@ P = [xunc^2 0 0 0 0 0; 0 xunc^2 0 0 0 0;0 0 xunc^2 0 0 0;0 0 0 yunc^2 0 0;0 0 0 
 % Measurement- distancia, odomx e odomy
 
 
-for i = 2:10000%(size(odomx,1)-3)
+for i = 2:(size(odomx,1)-3)
     T = t(i) - t(i-1);
 
     % Jacobian motion model
@@ -45,13 +45,14 @@ for i = 2:10000%(size(odomx,1)-3)
          [0 0 0 0 1 T ]
          [0 0 0 0 0 1 ]];
 
-    x_pos = [Estimated_x(i-1);Estimated_vx(i-1);true_ax(i-1);Estimated_y(i-1);Estimated_vy(i-1);true_ay(i-1)];
+    x_pos = F*[Estimated_x(i-1);Estimated_vx(i-1);true_ax(i-1);Estimated_y(i-1);Estimated_vy(i-1);true_ay(i-1)];
 
     Estimated_x(i) = x_pos(1);
     Estimated_y(i) = x_pos(4);
     Estimated_vx(i) = x_pos(2); 
     Estimated_vy(i) = x_pos(5);
-
+%     true_ax(i) = x_pos(3);
+%     true_ay(i) = x_pos(6);
     
     Norma = norm([Estimated_x(i) Estimated_y(i)]);
     
@@ -75,7 +76,8 @@ for i = 2:10000%(size(odomx,1)-3)
     Estimated_y(i) = aux(4);
     Estimated_vx(i) = aux(2); 
     Estimated_vy(i) = aux(5);
-
+%     true_ax(i) = aux(3);
+%     true_ay(i) = aux(6);
 
 end
 
