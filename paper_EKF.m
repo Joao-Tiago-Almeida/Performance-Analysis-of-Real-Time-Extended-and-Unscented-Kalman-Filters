@@ -1,129 +1,251 @@
+clear;
 close all;
-clear
-
-%% Colado a Cuspo
-% ERRO - è necessário ter a aceleração ou orientação teórica
-% Está mal porque o documento não tem aceleração
-% Measurements - Distância à origem(landmark), Odometria
-
-[t,xa] = ode45(@(t,x) odefcn(t,x),[0 1],[0; 0.5; 0.1; 0; 0.5; 0.1]');
-
-odomx = awgn(xa(:,1),15/0.001,'measured','linear');
-odomy = awgn(xa(:,4),15/0.001,'measured','linear');
-% Initial Conditions 
-
-Estimated_x = zeros(size(odomx,1),1); Estimated_x(1) = xa(1,1);
-Estimated_y = zeros(size(odomy,1),1); Estimated_y(1) = xa(1,4);
-Estimated_vx = zeros(size(odomx,1),1); Estimated_vx(1) =  xa(1,2); 
-Estimated_vy = zeros(size(odomy,1),1); Estimated_vy(1) = xa(1,5);
-true_ax = zeros(size(odomx,1),1); true_ax(1) = xa(1,3);
-true_ay = zeros(size(odomy,1),1);true_ay(1) = xa(1,6);
-% 
-% [true_ax,Estimated_vx] = Get_prop(x_true);
-% [true_ay,Estimated_vy] = Get_prop(y_true);
+clearvars my_timer;
+% FIM ou IEKF-eq - qUASI nEWTON (QN-EKF) ou IEKF ou Levenberg-Marquardy
+% Iterated EKF
 
 
-% Satae x.xdot.xdotdot,...
-% Depois meter a formula do process noise como está lá
+%% EKF 
+
+%% Simulation path
+% Car path
+x_start =0;y_start=0;
+[x_teo,y_teo,theta_teo,phi_teo] = testingrobot(x_start,y_start);
+
+% Test Both paths
+
+% figure(30);
+% plot(x_teo,y_teo)
+% hold on;
+% plot(x_teo1,y_teo1)
+
+
+IMU_data = [awgn(x_teo',15/0.0001,'measured','linear'),awgn(y_teo',15/0.0001,'measured','linear'),awgn(theta_teo',15/0.00001,'measured','linear')];
+x_new = zeros(size(IMU_data,1),1); x_new(1) = x_teo(1);
+y_new = zeros(size(IMU_data,1),1); y_new(1) = y_teo(1);
+theta_new = zeros(size(IMU_data,1),1); theta_new(1) = theta_teo(1);
 xunc = .01; % 
 yunc = .01; % 
 
-Q = eye(6).*0.01;
-P = [xunc^2 0 0 0 0 0; 0 xunc^2 0 0 0 0;0 0 xunc^2 0 0 0;0 0 0 yunc^2 0 0;0 0 0 0 yunc^2 0;0 0 0 0 0 yunc^2];
+Q = eye(3).*0.01;
+R = eye(3).*0.01;
+P = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
+for i = 2:size(x_teo,2)
 
-% Measurement- distancia, odomx e odomy
+    %% Prediction Phase
+
+    %% Process State
+    Norma = norm([x_teo(i) y_teo(i)]-[x_teo(i-1) y_teo(i-1)]);
+    x_new(i) = x_new(i-1) + Norma*cos(theta_new(i-1));
+    y_new(i) = y_new(i-1) + Norma*sin(theta_new(i-1));
+    theta_new(i) = IMU_data(i,3);
 
 
-for i = 2:(size(odomx,1)-3)
-    T = t(i);
+    F = [1 0 -Norma*sin(theta_new(i-1));...
+         0 1 Norma*cos(theta_new(i-1)); ...
+         0 0 1];
 
-    % Jacobian motion model
-    F = [[1 T 0.5*T^2 0 0 0]
-         [0 1 T 0 0 0]
-         [0 0 1 0 0 0]
-         [0 0 0 1 T 0.5*T^2]
-         [0 0 0 0 1 T ]
-         [0 0 0 0 0 1 ]];
+    %% Process Covariance
 
-    x_pos = F*[Estimated_x(i-1);Estimated_vx(i-1);true_ax(i-1);Estimated_y(i-1);Estimated_vy(i-1);true_ay(i-1)];
+    P = F*P*F';
 
-    Estimated_x(i) = x_pos(1);
-    Estimated_y(i) = x_pos(4);
-    Estimated_vx(i) = x_pos(2); 
-    Estimated_vy(i) = x_pos(5);
-%     true_ax(i) = x_pos(3);
-%     true_ay(i) = x_pos(6);
-    
-    Norma = norm([Estimated_x(i) Estimated_y(i)]);
-    
-    H = [((Estimated_x(i))/Norma) 0 0 ((Estimated_y(i))/Norma) 0 0; ...
-         1 0 0 0 0 0;
-         0 0 0 1 0 0];
+    %% Update Phase
+    Norma =  norm([x_new(i) y_new(i)]);
+    H = [((x_new(i))/Norma) ((y_new(i))/Norma) 0; ...
+          ((-y_new(i))/(x_new(i)^2 + y_new(i)^2)) ((x_new(i))/(x_new(i)^2 + y_new(i)^2)) 0];
 
-   y_hat = [norm([Estimated_x(i) Estimated_y(i)]); ...
-        Estimated_x(i);
-        Estimated_y(i)];
-   y1 = [ norm([xa(i,1) xa(i,4) ]); xa(i,1); ...
-         xa(i,4)];
-    y = (y1 - y_hat);
-   P = F*P*F';
-   %% Update Stage
-   K = P*H'/(H*P*H' + H*Q*H');
-   aux =  x_pos + K*y;
-   P = (eye(size(K,1))-K*H)*P;
-   
-    Estimated_x(i) = aux(1);
-    Estimated_y(i) = aux(4);
-    Estimated_vx(i) = aux(2); 
-    Estimated_vy(i) = aux(5);
-%     true_ax(i) = aux(3);
-%     true_ay(i) = aux(6);
+    Norma = norm([x_teo(i) y_teo(i)]);
+    y_hat = [norm([x_new(i) y_new(i)]);atan(y_new(i)/x_new(i))];
+    y_theory = [norm([x_teo(i) y_teo(i)]);atan(y_teo(i)/x_teo(i))];
+    y = y_theory - y_hat;
+    K = P*H'/(H*P*H' + H*Q*H');
+    aux =  [x_new(i);y_new(i);theta_new(i)] + K*y;
+    P = (eye(size(K,1))-K*H)*P;
+
+    x_new(i) = aux(1);
+    y_new(i) = aux(2);
+    theta_new(i) = aux(3);
 
 end
 
+% figure();
+% plot(x_teo,y_teo);
+% hold on;
+% plot(IMU_data(:,1),IMU_data(:,2));
+% hold on;
+% plot(x_new,y_new);
+% legend('True Course','Odometry','EKF Based');
+% legend show;
 
+%% UEKF
+x_new_uEKF = zeros(size(IMU_data,1),1); x_new_uEKF(1) = x_teo(1);
+y_new_uEKF = zeros(size(IMU_data,1),1); y_new_uEKF(1) = y_teo(1);
+theta_new_uEKF = zeros(size(IMU_data,1),1); theta_new_uEKF(1) = theta_teo(1);
+xunc = .01; %  
 
+Q = eye(3).*0.0001;
+R = eye(3).*0.01;
 
+P = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
+for i = 2:size(x_teo,2)
+    
+    %%%%%%%%%%%%% Initialising measurement and process noise %%%%%%%%%%%%%
+    Norma = norm([x_teo(i) y_teo(i)]-[x_teo(i-1) y_teo(i-1)]);
 
+    x_new_uEKF(i) = x_new_uEKF(i-1) + Norma*cos(theta_new_uEKF(i-1));
+    y_new_uEKF(i) = y_new_uEKF(i-1) + Norma*sin(theta_new_uEKF(i-1));
+    theta_new_uEKF(i) = IMU_data(i,3);
 
-
+    F = [1 0 -Norma*sin(theta_new_uEKF(i-1));...
+         0 1 Norma*cos(theta_new_uEKF(i-1)); ...
+         0 0 1];
+%     %%%%%%%%%%%%% Predict Stage %%%%%%%%%%%%%
 % 
+%     %%%%%%%%%%%%% State Process %%%%%%%%%%%%%
+    
+%     %%%%%%%%%%%%% Defining the Terms of the Measurement Jacobian %%%%%%%%%%%%%
+%    
+    Norma =  norm([x_new_uEKF(i) y_new_uEKF(i)]);
+    H = [((x_new_uEKF(i))/Norma) ((y_new_uEKF(i))/Norma) 0; ...
+          ((-y_new_uEKF(i))/(x_new_uEKF(i)^2 + y_new_uEKF(i)^2)) ((x_new_uEKF(i))/(x_new_uEKF(i)^2 + y_new_uEKF(i)^2)) 0];
+
+    y_theory = [norm([x_teo(i) y_teo(i)]);atan(y_teo(i)/x_teo(i))];
+
+
+
+    L=3;                                 %numer of states
+    m=2;                                 %numer of measurements
+    alpha=1e-3;                                 %default, tunable
+    ki=0;                                       %default, tunable
+    beta=2;                                     %default, tunable
+    lambda=1-L;                    %scaling factor
+    c=L+lambda;                                 %scaling factor
+    Wm=[lambda/c 0.5/c+zeros(1,2*L)];           %weights for means
+    Wc=Wm;
+    Wc(1)=Wc(1)+(1-alpha^2+beta);    
+    c=sqrt(c);
+    
+    % Acho que só leio 2*L e não 2*L + 1
+    x_pos_uEKF = [x_new_uEKF(i-1);y_new_uEKF(i-1);theta_new_uEKF(i-1)];
+    xsigma_post=sigmas(x_pos_uEKF,P,c);
+    sum_group = zeros(3,1);
+    pos_group = zeros(3,2*L+1);
+    for j = 1:2*L+1
+        Norma = norm([x_teo(i) y_teo(i)]-[x_teo(i-1) y_teo(i-1)]);
+
+        x_new1 = xsigma_post(1,j) + Norma*cos(xsigma_post(3,1));
+        y_new1 = xsigma_post(2,j) + Norma*sin(xsigma_post(3,1));
+        theta_new1 = theta_teo(i);
+        pos_group(:,j) = [x_new1 y_new1 theta_new1];
+        sum_group = sum_group + Wm(j)*pos_group(:,j);      
+        
+    end
+    
+    Deviations = pos_group - sum_group(:,ones(1,2*L+1));
+    P_pos = Deviations*diag(Wc)*Deviations' + F*R*F';
+    
+    %% Measurements
+    sum_group_mea = zeros(2,1);
+    pos_group_mea = zeros(2,2*L+1);    
+    for j = 1:2*L+1
+
+        y_hat_test = [norm([xsigma_post(1,j) xsigma_post(2,j)]);atan(xsigma_post(2,j)/xsigma_post(1,j))];
+        pos_group_mea(:,j) = y_hat_test;
+        sum_group_mea = sum_group_mea + Wm(j)*pos_group_mea(:,j);      
+        
+    end
+    
+    Deviations_mea = pos_group_mea - sum_group_mea(:,ones(1,2*L+1));
+    P_mea = Deviations_mea*diag(Wc)*Deviations_mea' + H*Q*H';
+
+    P12 = Deviations*diag(Wc)*Deviations_mea';
+    K = P12*inv(P_mea);
+
+    aux = sum_group + K*(y_theory-sum_group_mea); 
+    P = P_pos - K*P12';
+   
+   x_new_uEKF(i) = aux(1);
+    y_new_uEKF(i) = aux(2);
+    theta_new_uEKF(i) = aux(3);
+
+
+end
 figure();
-plot(xa(:,1),xa(:,4));
+plot(x_teo,y_teo);
 hold on;
-plot(odomx,odomy);
+plot(IMU_data(:,1),IMU_data(:,2));
 hold on;
-plot(Estimated_x,Estimated_y);
-legend('True Course','Odometry','EKF Based');
+plot(x_new,y_new);
+hold on;
+plot(x_new_uEKF,y_new_uEKF);
+
+legend('True Course','Odometry','EKF Based','UEKF Based');
 legend show;
 
-function F = odefcn(t,x)
-
-F = [x(1)+t*x(2) + 0.5*t^2*x(3);
-     x(2) + t*x(3);
-     x(3);
-     x(4)+t*x(5) + 0.5*t^2*x(6);
-     x(5) + t*x(6);
-     x(6)];
- 
+function X=sigmas(x,P,c)
+%Sigma points around reference point
+%Inputs:
+%       x: reference point
+%       P: covariance
+%       c: coefficient
+%Output:
+%       X: Sigma points
+P = [P(1,1) 0 0;0 P(2,2) 0; 0 0 P(3,3)];
+A = c*chol(P)';
+Y = x(:,ones(1,numel(x)));
+X = [x Y+A Y-A]; 
 end
-%% Teste
+
+function [x_vec,y_vec,theta_vec,phi_vec] = testingrobot(x_start,y_start)
+
+
+start_v = 0;
+my_timer = timer('Name', 'my_timer', 'ExecutionMode', 'fixedRate', 'Period', 0.1, ...
+                    'StartFcn', @(x,y)disp('started...'), ...
+                    'StopFcn', @(x,y)disp('stopped ...'), ...
+                    'TimerFcn', @my_start_fcn);
+x = x_start;
+y = y_start;
+t = 0;
+theta = pi/4;
+x_old = x;
+y_old = y;
+v = 0.5;
+phi = 0;
+w_phi = 0.01;
+dx = cos(theta)*0.02;
+dy = sin(theta)*0.02;
+figure
+plot([x,x+dx],[y,y+dy],'b');
+hold on;
+plot(x,y,'O');
+start(my_timer);
+while t < 50
+    if start_v == 1
+        x_old = x;
+        y_old = y;
+        [x,y,theta,phi] = robot_simulation(x, y, theta, v, phi, w_phi);
+        dx = cos(theta)*0.002;
+        dy = sin(theta)*0.002;
+        plot([x,x+dx],[y,y+dy],'b');
+        plot(x,y,'O');
+        x_vec(t+1) = x;
+        y_vec(t+1) = y;
+        theta_vec(t+1) = theta;
+        phi_vec(t+1) = phi;
+        t = t + 1;
+        
+        start_v = 0;
+    end
+end
 
 
 
-% 
-% function [acc,v] = Get_prop(position)
-%     acc = zeros(size(position,1),1);
-%     v = zeros(size(position,1),1);
-%     for i = 2:size(position,1)
-%         v(i-1) = (position(i) -position(i-1))/0.1;
-%         if i > 2
-%            acc(i-1) =(v(i) -v(i-1))/0.1;
-%         end
-%         
-%         
-%     end
-% 
-% 
-% 
-% end
+function my_start_fcn(obj, event)
+    start_v = 1;
+end
+
+
+
+
+end
