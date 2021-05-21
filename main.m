@@ -3,8 +3,7 @@ close all
 clc
 
 %%
-imshow(imread('yellowlily.jpg'))
-i = 1;
+
 finished = 'NO';
 i = 1;
 while strcmpi(finished,'NO')

@@ -5,12 +5,26 @@ clearvars my_timer;
 % Iterated EKF
 
 
-%% EKF 
+%% User choice for the path
+switch menu('Do you want to draw a path?','Yes, sure!','No, use the pre-defined.')
+    %% Drawing a path
+    case 1 
+        path = drawfreehand('Closed',false,'FaceAlpha',0,'InteractionsAllowed','none');
+        x_teo = path.Position(:,1)';
+        y_teo = path.Position(:,2)';
+        theta_teo = atan2(diff(y_teo) , diff(x_teo));   % compute direction [rad]
+        theta_teo = [theta_teo, theta_teo(end)];    % the last direction does not vary
+        phi_teo = diff(theta_teo);    % compute angular velocity [rad/s]
+        phi_teo = [phi_teo, phi_teo(end)];  % the last velocity does not vary
+        delete(path);
+        close;
+    %% Simulation path
+	case 2
+        x_start =0;y_start=0; theta_start=pi/4;
+        [x_teo,y_teo,theta_teo,phi_teo] = testingrobot(x_start,y_start,theta_start);
+end
 
-%% Simulation path
-% Car path
-x_start =0;y_start=0;
-[x_teo,y_teo,theta_teo,phi_teo] = testingrobot(x_start,y_start);
+%% EKF 
 
 % Test Both paths
 
@@ -170,17 +184,23 @@ for i = 2:size(x_teo,2)
 
 
 end
-figure();
+
+
+
+
+figure('WindowStyle', 'docked');clf;
+hold on;
 plot(x_teo,y_teo);
-hold on;
+
 plot(IMU_data(:,1),IMU_data(:,2));
-hold on;
 plot(x_new,y_new);
-hold on;
 plot(x_new_uEKF,y_new_uEKF);
 
 legend('True Course','Odometry','EKF Based','UEKF Based');
 legend show;
+
+
+%% Auxiliar function
 
 function X=sigmas(x,P,c)
 %Sigma points around reference point
@@ -196,56 +216,40 @@ Y = x(:,ones(1,numel(x)));
 X = [x Y+A Y-A]; 
 end
 
-function [x_vec,y_vec,theta_vec,phi_vec] = testingrobot(x_start,y_start)
 
+% Rafael, arranja isto que nso se percebe nada!
+function [x_vec,y_vec,theta_vec,phi_vec] = testingrobot(x,y,theta)
 
-start_v = 0;
-my_timer = timer('Name', 'my_timer', 'ExecutionMode', 'fixedRate', 'Period', 0.1, ...
-                    'StartFcn', @(x,y)disp('started...'), ...
-                    'StopFcn', @(x,y)disp('stopped ...'), ...
-                    'TimerFcn', @my_start_fcn);
-x = x_start;
-y = y_start;
 t = 0;
-theta = pi/4;
-x_old = x;
-y_old = y;
+
 v = 0.5;
 phi = 0;
 w_phi = 0.01;
+
 dx = cos(theta)*0.02;
 dy = sin(theta)*0.02;
+
 figure
 plot([x,x+dx],[y,y+dy],'b');
 hold on;
 plot(x,y,'O');
-start(my_timer);
+
 while t < 50
-    if start_v == 1
-        x_old = x;
-        y_old = y;
-        [x,y,theta,phi] = robot_simulation(x, y, theta, v, phi, w_phi);
-        dx = cos(theta)*0.002;
-        dy = sin(theta)*0.002;
-        plot([x,x+dx],[y,y+dy],'b');
-        plot(x,y,'O');
-        x_vec(t+1) = x;
-        y_vec(t+1) = y;
-        theta_vec(t+1) = theta;
-        phi_vec(t+1) = phi;
-        t = t + 1;
-        
-        start_v = 0;
-    end
+    x_old = x;
+    y_old = y;
+    [x,y,theta,phi] = robot_simulation(x, y, theta, v, phi, w_phi);
+    dx = cos(theta)*0.002;
+    dy = sin(theta)*0.002;
+    plot([x,x+dx],[y,y+dy],'b');
+    plot(x,y,'O');
+    x_vec(t+1) = x;
+    y_vec(t+1) = y;
+    theta_vec(t+1) = theta;
+    phi_vec(t+1) = phi;
+    t = t + 1;
+       
 end
 
 
-
-function my_start_fcn(obj, event)
-    start_v = 1;
 end
 
-
-
-
-end
