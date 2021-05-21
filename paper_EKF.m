@@ -125,7 +125,7 @@ for i = 2:size(x_teo,2)
     Wc(1)=Wc(1)+(1-alpha^2+beta);    
     c=sqrt(c);
     
-    % Acho que só leio 2*L e não 2*L + 1
+    % Acho que sï¿½ leio 2*L e nï¿½o 2*L + 1
     x_pos_uEKF = [x_new_uEKF(i-1);y_new_uEKF(i-1);theta_new_uEKF(i-1)];
     xsigma_post=sigmas(x_pos_uEKF,P,c);
     sum_group = zeros(3,1);

@@ -1,13 +1,13 @@
 global start_v
 start_v = 0;
-my_timer = timer('Name', 'my_timer', 'ExecutionMode', 'fixedRate', 'Period', 0.1, ...
+my_timer = timer('Name', 'my_timer', 'ExecutionMode', 'fixedRate', 'Period', 0.001, ...
                     'StartFcn', @(x,y)disp('started...'), ...
                     'StopFcn', @(x,y)disp('stopped ...'), ...
                     'TimerFcn', @my_start_fcn);
 x = 0;
 y = 0;
 t = 0;
-theta = pi/4;
+theta = 0;
 x_old = 0;
 y_old = 0;
 v = 0.5;
