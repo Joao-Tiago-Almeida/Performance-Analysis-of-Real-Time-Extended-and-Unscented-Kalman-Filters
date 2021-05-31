@@ -127,9 +127,10 @@ y_newUKF_Matlab = zeros(size(IMU_data,1),1); y_newUKF_Matlab(1) = y_teo(1);
 theta_newUKF_Matlab = zeros(size(IMU_data,1),1); theta_newUKF_Matlab(1) = theta_teo(1);
 xunc = .01; % 
 yunc = .01; % 
+QUKF = eye(3).*0.1;
 
 QUKF_Matlab = eye(2).*0.001;
-RUKF_Matlab = eye(3).*0.00001;
+RUKF_Matlab = eye(3).*0.001;
 PUKF_Matlab = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2].*0.001;
 
 
@@ -181,7 +182,7 @@ while(true)
 
     % Process Covariance
 
-    P = F*P*F';
+    P = F*P*F' + F*Q*F';
 
     % Update Phase
     Norma =  norm([x_new(actual_instance) y_new(actual_instance)]);
@@ -196,7 +197,7 @@ while(true)
     y_theory = [norm([x_teo(actual_instance) y_teo(actual_instance)]);atan2((y_teo(actual_instance)-y_teo(past_instance)),(x_teo(actual_instance)-x_teo(past_instance)))];
 
     y = y_theory - y_hat;
-    K = P*H'/(H*P*H' + H*Q*H');
+    K = P*H'/(H*P*H' + H*R*H');
     aux =  [x_new(actual_instance);y_new(actual_instance);theta_new(actual_instance)] + K*y;
     P = (eye(size(K,1))-K*H)*P;
 
@@ -272,7 +273,7 @@ while(true)
     end
     
     Deviations_mea = pos_group_mea - sum_group_mea(:,ones(1,2*L+1));
-    P_mea = Deviations_mea*diag(Wc)*Deviations_mea' + H*Q*H';
+    P_mea = Deviations_mea*diag(Wc)*Deviations_mea' + H*QUKF*H';
 
     P12 = Deviations*diag(Wc)*Deviations_mea';
     K = P12*inv(P_mea);
