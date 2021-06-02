@@ -82,9 +82,9 @@ theta_new = zeros(size(IMU_data,1),1); theta_new(1) = theta_teo(1);
 xunc = .01; % 
 yunc = .01; % 
 
-Q = eye(3).*0.01;
-R = eye(3).*0.01;
-P = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
+QEKF = eye(3).*0.01;
+REKF = eye(3).*0.01;
+PEKF = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
 
 
 %% UKF
@@ -93,9 +93,9 @@ y_new_uEKF = zeros(size(IMU_data,1),1); y_new_uEKF(1) = y_teo(1);
 theta_new_uEKF = zeros(size(IMU_data,1),1); theta_new_uEKF(1) = theta_teo(1);
 xunc = .01; 
 
-Q = eye(3).*0.001;
-R = eye(3).*0.00001;
-P = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
+QUKF = eye(3).*0.00001;
+RUKF = eye(3).*0.000001;
+PUKF = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
 
 actual_instance=1;  
 
@@ -109,51 +109,34 @@ xunc = .01; %
 yunc = .01; % 
 
 QEKF_Matlab = eye(2).*0.01;
-REKF_Matlab = eye(3).*0.0001;
-PEKF_Matlab = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2].*0.001;
+
+REKF_Matlab = eye(3).*0.01;
+PEKF_Matlab = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
 
 x_pred = [x_newEKF_Matlab(1);y_newEKF_Matlab(1);theta_newEKF_Matlab(1)];
-    filter = trackingEKF('State', x_pred, ...
-        'StateCovariance', PEKF_Matlab, ...
-        'MeasurementNoise', QEKF_Matlab, ...
-        'StateTransitionFcn', @State_Model, ...
-        'MeasurementFcn', @measurement_Model, ...
-        'StateTransitionJacobianFcn', @state_jacobian, ...
-        'MeasurementJacobianFcn', @mea_jacobian,...
-        'ProcessNoise', REKF_Matlab);
+
 % UKF
 x_newUKF_Matlab = zeros(size(IMU_data,1),1); x_newUKF_Matlab(1) = x_teo(1);
 y_newUKF_Matlab = zeros(size(IMU_data,1),1); y_newUKF_Matlab(1) = y_teo(1);
 theta_newUKF_Matlab = zeros(size(IMU_data,1),1); theta_newUKF_Matlab(1) = theta_teo(1);
 xunc = .01; % 
 yunc = .01; % 
-QUKF = eye(3).*0.1;
-
-QUKF_Matlab = eye(2).*0.001;
-RUKF_Matlab = eye(3).*0.001;
-PUKF_Matlab = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2].*0.001;
-
-
 x_predUKF = [x_newUKF_Matlab(1);y_newUKF_Matlab(1);theta_newUKF_Matlab(1)];
-    filterUKF = trackingUKF('State', x_predUKF, ...
-        'StateCovariance', PUKF_Matlab, ...
-        'MeasurementNoise', QUKF_Matlab, ...
-        'StateTransitionFcn', @State_Model, ...
-        'MeasurementFcn', @measurement_Model, ...
-        'Alpha',1e-3,...
-        'Beta',2,...
-        'Kappa',3,...
-        'ProcessNoise', RUKF_Matlab);
 
-    
+QUKF_Matlab = eye(2).*0.00001;
+RUKF_Matlab = eye(3).*0.000001;
+PUKF_Matlab = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
+
+
+
+ Acc_error_EKF = 0;
+ Acc_error_UKF = 0;
 %% Seting the timer
 my_timer = timer('TimerFcn','toc','StartFcn','tic','StartDelay',0.2);
 
 actual_instance = 1;
 ready=true;
 start(my_timer);
-
-%% Real-time simulation
 while(true)
     %% Instance update
     past_instance = actual_instance;
@@ -168,58 +151,61 @@ while(true)
     %% Fixed Rate Simulation
     wait(my_timer)
     start(my_timer);
-  
-    %%%%%%%%%%%%% EXTENDED KALMAN FILTER %%%%%%%%%%%%%
+   
     
-    %% Prediction Step
-    
-    % System Dynamics
+    %% EKF
+    % Process State
     Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_teo(past_instance) y_teo(past_instance)]);
     x_new(actual_instance) = x_new(past_instance) + Norma*cos(theta_new(past_instance));
     y_new(actual_instance) = y_new(past_instance) + Norma*sin(theta_new(past_instance));
-    theta_new(actual_instance) = IMU_data(actual_instance,3);
+    theta_new(actual_instance) = theta_teo(actual_instance) + Acc_error_EKF;
 
-    % Jacobian of the System Dynamics
+
     F = [1 0 -Norma*sin(theta_new(past_instance));...
          0 1 Norma*cos(theta_new(past_instance)); ...
          0 0 1];
 
-    % Predicted Measurement uncertainty
-    P = F*P*F' + F*Q*F';
+    % Process Covariance
 
-    %% Update Step
-    
-    % Jacobian of the Observation Dynamics
+    PEKF = F*PEKF*F' + F*REKF*F';
+
+    % Update Phase
     Norma =  norm([x_new(actual_instance) y_new(actual_instance)]);
+
+    
     H = [((x_new(actual_instance))/Norma) ((y_new(actual_instance))/Norma) 0; ...
           ((-(y_new(actual_instance)-y_new(past_instance)))/((x_new(actual_instance)-x_new(past_instance))^2 + (y_new(actual_instance)-y_new(past_instance))^2)) ((x_new(actual_instance)-x_new(past_instance))/((x_new(actual_instance)-x_new(past_instance))^2 + (y_new(actual_instance)-y_new(past_instance))^2)) 0];
 
-
+    Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]);
     y_hat = [norm([x_new(actual_instance) y_new(actual_instance)]);atan2((y_new(actual_instance)-y_new(past_instance)),(x_new(actual_instance)-x_new(past_instance)))];
-    y_theory = [norm([x_teo(actual_instance) y_teo(actual_instance)]);atan2((y_teo(actual_instance)-y_teo(past_instance)),(x_teo(actual_instance)-x_teo(past_instance)))];
 
-    y = y_theory - y_hat;
-    
-    % Kalmans' Gain
-    K = P*H'/(H*P*H' + H*R*H');
-    aux =  [x_new(actual_instance);y_new(actual_instance);theta_new(actual_instance)] + K*y;
+    y_theory = [norm([x_teo(actual_instance) y_teo(actual_instance)]);atan2((y_teo(actual_instance)-y_teo(past_instance)),(x_teo(actual_instance)-x_teo(past_instance)))];
+    u = [y_theory(1)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1)];
+
+    y = y_theory - y_hat + u;
+    KEKF = PEKF*H'/(H*PEKF*H' + H*QEKF*H');
+    aux =  [x_new(actual_instance);y_new(actual_instance);theta_new(actual_instance)] + KEKF*y;
     
     % Updated Measurement uncertainty
-    P = (eye(size(K,1))-K*H)*P;
-    
-    % Estimated values
+    PEKF = (eye(size(KEKF,1))-KEKF*H)*PEKF;
+
+    % Estimated NEW values
     x_new(actual_instance) = aux(1);
     y_new(actual_instance) = aux(2);
     theta_new(actual_instance) = aux(3);
     
+    % accumulating the error (the integral/sum does not let the system aforget about past deviations)
+    Acc_error_EKF = Acc_error_EKF + (theta_teo(actual_instance)-theta_new(actual_instance));
+    
     %%%%%%%%%%%%% EXTENDED KALMAN FILTER %%%%%%%%%%%%%
     
     %% Initialising measurement and process noise
+    
     Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_teo(past_instance) y_teo(past_instance)]);
 
     x_new_uEKF(actual_instance) = x_new_uEKF(past_instance) + Norma*cos(theta_new_uEKF(past_instance));
     y_new_uEKF(actual_instance) = y_new_uEKF(past_instance) + Norma*sin(theta_new_uEKF(past_instance));
-    theta_new_uEKF(actual_instance) = IMU_data(actual_instance,3);
+    theta_new_uEKF(actual_instance) = theta_new_uEKF(past_instance) + (theta_teo(actual_instance) - theta_new_uEKF(past_instance));
 
     F = [1 0 -Norma*sin(theta_new_uEKF(past_instance));...
          0 1 Norma*cos(theta_new_uEKF(past_instance)); ...
@@ -228,7 +214,7 @@ while(true)
  
     % State Process    
     % Defining the Terms of the Measurement Jacobian
-    
+
     Norma =  norm([x_new_uEKF(actual_instance) y_new_uEKF(actual_instance)]);
 
     H = [((x_new_uEKF(actual_instance))/Norma) ((y_new_uEKF(actual_instance))/Norma) 0; ...
@@ -250,22 +236,22 @@ while(true)
     c=sqrt(c);
     
     x_pos_uEKF = [x_new_uEKF(past_instance);y_new_uEKF(past_instance);theta_new_uEKF(past_instance)];
-    xsigma_post=sigmas(x_pos_uEKF,P,c);
+    xsigma_post=sigmas(x_pos_uEKF,PUKF,c);
     sum_group = zeros(3,1);
     pos_group = zeros(3,2*L+1);
     for j = 1:2*L+1
         Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_teo(past_instance) y_teo(past_instance)]);
 
-        x_new1 = xsigma_post(1,j) + Norma*cos(xsigma_post(3,1));
-        y_new1 = xsigma_post(2,j) + Norma*sin(xsigma_post(3,1));
-        theta_new1 = theta_teo(actual_instance);
+        x_new1 = xsigma_post(1,j) + Norma*cos(xsigma_post(3,j));
+        y_new1 = xsigma_post(2,j) + Norma*sin(xsigma_post(3,j));
+        theta_new1 =  theta_teo(actual_instance) + + Acc_error_UKF;
         pos_group(:,j) = [x_new1 y_new1 theta_new1];
         sum_group = sum_group + Wm(j)*pos_group(:,j);      
         
     end
     
     Deviations = pos_group - sum_group(:,ones(1,2*L+1));
-    P_pos = Deviations*diag(Wc)*Deviations' + F*R*F';
+    P_pos = Deviations*diag(Wc)*Deviations' + F*RUKF*F';
     
     % Measurements
     sum_group_mea = zeros(2,1);
@@ -282,33 +268,64 @@ while(true)
     P_mea = Deviations_mea*diag(Wc)*Deviations_mea' + H*QUKF*H';
 
     P12 = Deviations*diag(Wc)*Deviations_mea';
-    K = P12*inv(P_mea);
+    KUKF = P12*inv(P_mea);
+    u = [y_theory(1)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1)];
 
-    aux = sum_group + K*(y_theory-sum_group_mea); 
-    P = P_pos - K*P12';
+    aux = sum_group + KUKF*(y_theory-sum_group_mea + u); 
+    PUKF = P_pos - KUKF*P12';
    
    x_new_uEKF(actual_instance) = aux(1);
     y_new_uEKF(actual_instance) = aux(2);
     theta_new_uEKF(actual_instance) = aux(3);
 
+    Acc_error_UKF = Acc_error_UKF + (theta_teo(actual_instance)-theta_new_uEKF(actual_instance));
+
     
-    
-    %% MATLAB FUNCTIONS
+    %% MATLAB FUNCTION
     % Prediction Phase
     % Process State
+  filterUKF = trackingUKF('State', x_predUKF, ...
+    'StateCovariance', PUKF_Matlab, ...
+    'MeasurementNoise', QUKF_Matlab, ...
+    'StateTransitionFcn', @State_Model, ...
+    'MeasurementFcn', @measurement_Model, ...
+    'Alpha',1e-3,...
+    'Beta',2,...
+    'Kappa',3,...
+    'ProcessNoise', RUKF_Matlab);
+
+ filter = trackingEKF('State', x_pred, ...
+    'StateCovariance', PEKF_Matlab, ...
+    'MeasurementNoise', QEKF_Matlab, ...
+    'StateTransitionFcn', @State_Model, ...
+    'MeasurementFcn', @measurement_Model, ...
+    'StateTransitionJacobianFcn', @state_jacobian, ...
+    'MeasurementJacobianFcn', @mea_jacobian,...
+    'ProcessNoise', REKF_Matlab);
     
-    [xpred, ~] = predict(filter,[x_teo(actual_instance);y_teo(actual_instance);theta_teo(actual_instance)],[x_teo(past_instance);y_teo(past_instance);theta_teo(past_instance)],IMU_data(actual_instance,3));  
-    x_newEKF_Matlab(actual_instance) = xpred(1);
-    y_newEKF_Matlab(actual_instance) = xpred(2);
-    theta_newEKF_Matlab(actual_instance) = xpred(3);
-    
-    [xpred, ~] = predict(filterUKF,[x_teo(actual_instance);y_teo(actual_instance);theta_teo(actual_instance)],[x_teo(past_instance);y_teo(past_instance);theta_teo(past_instance)],IMU_data(actual_instance,3));  
-    x_newUKF_Matlab(actual_instance) = xpred(1);
-    y_newUKF_Matlab(actual_instance) = xpred(2);
-    theta_newUKF_Matlab(actual_instance) = xpred(3);
-    Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]);
     
     
+    [x_pred, PEKF_Matlab] = predict(filter,[x_teo(actual_instance);y_teo(actual_instance);theta_teo(actual_instance)],[x_teo(past_instance);y_teo(past_instance);theta_teo(past_instance)]);  
+    x_newEKF_Matlab(actual_instance) = x_pred(1);
+    y_newEKF_Matlab(actual_instance) = x_pred(2);
+    theta_newEKF_Matlab(actual_instance) = x_pred(3);
+    
+    [x_predUKF, PUKF_Matlab] = predict(filterUKF,[x_teo(actual_instance);y_teo(actual_instance);theta_teo(actual_instance)],[x_teo(past_instance);y_teo(past_instance);theta_teo(past_instance)]);  
+    x_newUKF_Matlab(actual_instance) = x_predUKF(1);
+    y_newUKF_Matlab(actual_instance) = x_predUKF(2);
+    theta_newUKF_Matlab(actual_instance) = x_predUKF(3);
+    
+    QUKF_Matlab = H*QUKF*H';
+    u = [y_theory(1)*(10^(-5))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-5))*((rand(1,1) > 0.5)*2 - 1)];
+    [x_pred, PEKF_Matlab] = correct(filter,y_theory+u,[ x_newEKF_Matlab(past_instance);y_newEKF_Matlab(past_instance);theta_newEKF_Matlab(past_instance)]);  
+    x_newEKF_Matlab(actual_instance) = x_pred(1);
+    y_newEKF_Matlab(actual_instance) = x_pred(2);
+    theta_newEKF_Matlab(actual_instance) = x_pred(3);
+    
+    [x_predUKF, PUKF_Matlab] = correct(filterUKF,y_theory+u,[x_newUKF_Matlab(past_instance);y_newUKF_Matlab(past_instance);theta_newUKF_Matlab(past_instance)]);  
+    x_newUKF_Matlab(actual_instance) = x_predUKF(1);
+    y_newUKF_Matlab(actual_instance) = x_predUKF(2);
+    theta_newUKF_Matlab(actual_instance) = x_predUKF(3);
     %% Live Update
 
     subplot(s1);
@@ -337,13 +354,11 @@ while(true)
     legend('True Course','EKF Based','UKF Based','EKF From Matlab Based','UKF From Matlab Based','Location','eastoutside');
     xlim(mean(x_teo(past_instance:actual_instance))+gap*[-1 1])
     ylim(mean(y_teo(past_instance:actual_instance))+gap*[-1 1])
-    
-    % Euclidean distance in the EKF estimations compared to the true values 
+
     subplot(s3);
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_new(actual_instance) y_new(actual_instance)]),'ro')
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_newEKF_Matlab(actual_instance) y_newEKF_Matlab(actual_instance)]),'go')
 
-    % Euclidean distance in the UKF estimations compared to the true values 
     subplot(s4);
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_new_uEKF(actual_instance) y_new_uEKF(actual_instance)]),'bo')
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_newUKF_Matlab(actual_instance) y_newUKF_Matlab(actual_instance)]),'co')
@@ -412,10 +427,3 @@ function [x,y,theta, phi] = robot_simulation(x_k, y_k, theta_k, v, phi_k, w_phi)
     dtheta = (v/L)*tan(abs(phi_k));
     theta = theta_k+dtheta;
 end
-
-
-
-
-
-
-

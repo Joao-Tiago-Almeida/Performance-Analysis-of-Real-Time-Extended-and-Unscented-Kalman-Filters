@@ -152,49 +152,57 @@ while(true)
     wait(my_timer)
     start(my_timer);
    
+    %%%%%%%%%%%%% EXTENDED KALMAN FILTER %%%%%%%%%%%%%
     
-    %% EKF
-    % Process State
+    %% Prediction Step
+    
+    % System Dynamics
     Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_teo(past_instance) y_teo(past_instance)]);
     x_new(actual_instance) = x_new(past_instance) + Norma*cos(theta_new(past_instance));
     y_new(actual_instance) = y_new(past_instance) + Norma*sin(theta_new(past_instance));
     theta_new(actual_instance) = theta_teo(actual_instance) + Acc_error_EKF;
 
-
+    % Jacobian of the System Dynamics
     F = [1 0 -Norma*sin(theta_new(past_instance));...
          0 1 Norma*cos(theta_new(past_instance)); ...
          0 0 1];
 
-    % Process Covariance
-
+    % Predicted Measurement uncertainty
     PEKF = F*PEKF*F' + F*REKF*F';
-
-    % Update Phase
-    Norma =  norm([x_new(actual_instance) y_new(actual_instance)]);
-
     
+    %% Update Step
+    
+    % Jacobian of the Observation Dynamics
+    Norma =  norm([x_new(actual_instance) y_new(actual_instance)]);
     H = [((x_new(actual_instance))/Norma) ((y_new(actual_instance))/Norma) 0; ...
           ((-(y_new(actual_instance)-y_new(past_instance)))/((x_new(actual_instance)-x_new(past_instance))^2 + (y_new(actual_instance)-y_new(past_instance))^2)) ((x_new(actual_instance)-x_new(past_instance))/((x_new(actual_instance)-x_new(past_instance))^2 + (y_new(actual_instance)-y_new(past_instance))^2)) 0];
 
-    Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]);
     y_hat = [norm([x_new(actual_instance) y_new(actual_instance)]);atan2((y_new(actual_instance)-y_new(past_instance)),(x_new(actual_instance)-x_new(past_instance)))];
 
+    % New measurements
     y_theory = [norm([x_teo(actual_instance) y_teo(actual_instance)]);atan2((y_teo(actual_instance)-y_teo(past_instance)),(x_teo(actual_instance)-x_teo(past_instance)))];
     u = [y_theory(1)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1)];
-
     y = y_theory - y_hat + u;
+    
+    % Kalmans' Gain
     KEKF = PEKF*H'/(H*PEKF*H' + H*QEKF*H');
     aux =  [x_new(actual_instance);y_new(actual_instance);theta_new(actual_instance)] + KEKF*y;
+    
+    % Updated Measurement uncertainty
     PEKF = (eye(size(KEKF,1))-KEKF*H)*PEKF;
 
+    % Estimated NEW values
     x_new(actual_instance) = aux(1);
     y_new(actual_instance) = aux(2);
     theta_new(actual_instance) = aux(3);
     
+    % accumulating the error (the integral/sum does not let the system aforget about past deviations)
     Acc_error_EKF = Acc_error_EKF + (theta_teo(actual_instance)-theta_new(actual_instance));
     
-    %% UKF
-        %%%%%%%%%%%%% Initialising measurement and process noise %%%%%%%%%%%%%
+    %%%%%%%%%%%%% EXTENDED KALMAN FILTER %%%%%%%%%%%%%
+    
+    %% Initialising measurement and process noise
+    
     Norma = norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_teo(past_instance) y_teo(past_instance)]);
 
     x_new_uEKF(actual_instance) = x_new_uEKF(past_instance) + Norma*cos(theta_new_uEKF(past_instance));
@@ -204,12 +212,11 @@ while(true)
     F = [1 0 -Norma*sin(theta_new_uEKF(past_instance));...
          0 1 Norma*cos(theta_new_uEKF(past_instance)); ...
          0 0 1];
-%     %%%%%%%%%%%%% Predict Stage %%%%%%%%%%%%%
-% 
-%     %%%%%%%%%%%%% State Process %%%%%%%%%%%%%
-    
-%     %%%%%%%%%%%%% Defining the Terms of the Measurement Jacobian %%%%%%%%%%%%%
-%    
+	%% Predict Stage
+ 
+    % State Process    
+    % Defining the Terms of the Measurement Jacobian
+
     Norma =  norm([x_new_uEKF(actual_instance) y_new_uEKF(actual_instance)]);
 
     H = [((x_new_uEKF(actual_instance))/Norma) ((y_new_uEKF(actual_instance))/Norma) 0; ...
@@ -230,7 +237,6 @@ while(true)
     Wc(1)=Wc(1)+(1-alpha^2+beta);    
     c=sqrt(c);
     
-    % Acho que s� leio 2*L e n�o 2*L + 1
     x_pos_uEKF = [x_new_uEKF(past_instance);y_new_uEKF(past_instance);theta_new_uEKF(past_instance)];
     xsigma_post=sigmas(x_pos_uEKF,PUKF,c);
     sum_group = zeros(3,1);
@@ -351,10 +357,12 @@ while(true)
     xlim(mean(x_teo(past_instance:actual_instance))+gap*[-1 1])
     ylim(mean(y_teo(past_instance:actual_instance))+gap*[-1 1])
 
+    % Euclidean distance in the EKF estimations compared to the true values 
     subplot(s3);
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_new(actual_instance) y_new(actual_instance)]),'ro')
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_newEKF_Matlab(actual_instance) y_newEKF_Matlab(actual_instance)]),'go')
 
+    % Euclidean distance in the UKF estimations compared to the true values 
     subplot(s4);
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_new_uEKF(actual_instance) y_new_uEKF(actual_instance)]),'bo')
     plot(actual_instance,norm([x_teo(actual_instance) y_teo(actual_instance)]-[x_newUKF_Matlab(actual_instance) y_newUKF_Matlab(actual_instance)]),'co')
@@ -379,8 +387,6 @@ legend show;
 
 
 %% Auxiliar function
-
-
 function X=sigmas(x,P,c)
 %Sigma points around reference point
 %Inputs:
@@ -395,46 +401,33 @@ Y = x(:,ones(1,numel(x)));
 X = [x Y+A Y-A]; 
 end
 
-
-% Rafael, arranja isto que nso se percebe nada!
+%% Scenario of the left curve
 function [x_vec,y_vec,theta_vec,phi_vec] = testingrobot(x,y,theta)
 
-t = 0;
+v = 0.5;    % initial velocity
+phi = 0;    % initial orientation
+w_phi = 0.01;   % initial angular velocity
 
-v = 0.5;
-phi = 0;
-w_phi = 0.01;
-
-dx = cos(theta)*0.02;
-dy = sin(theta)*0.02;
-
-% figure
-% plot([x,x+dx],[y,y+dy],'b');
-% hold on;
-% plot(x,y,'O');
-
-while t < 50
-    x_old = x;
-    y_old = y;
+for t = 1:50    % time iteration
     [x,y,theta,phi] = robot_simulation(x, y, theta, v, phi, w_phi);
-    dx = cos(theta)*0.002;
-    dy = sin(theta)*0.002;
-%     plot([x,x+dx],[y,y+dy],'b');
-%     plot(x,y,'O');
     x_vec(t+1) = x;
     y_vec(t+1) = y;
     theta_vec(t+1) = theta;
     phi_vec(t+1) = phi;
-    t = t + 1;
-       
 end
 
 
 end
 
-
-
-
-
-
-
+% simulate the moving object
+function [x,y,theta, phi] = robot_simulation(x_k, y_k, theta_k, v, phi_k, w_phi)
+    L = 2.2;
+    dx = v*cos(theta_k)*0.1;
+    dy = v*sin(theta_k)*0.1;
+    x = x_k+dx;
+    y = y_k+dy;
+    dphi = w_phi;
+    phi = phi_k+w_phi;
+    dtheta = (v/L)*tan(abs(phi_k));
+    theta = theta_k+dtheta;
+end
