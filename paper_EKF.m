@@ -3,6 +3,13 @@ close all;
 clearvars my_timer;
 clc;
 
+%% Paper - Performance Analysis of Real-Time Extended and Unscented Kalman Filters
+
+%%
+%  Data: 02/06/2021 - 2º Semestre 2020/2021
+% Alunos : João Almeida 90119, Rafael Cordeiro 90171
+% Docente : João Sequeira & Alberto Vale
+
 %% Graphical Interface
 
 fig = figure("Name","EKF vs UFK",'numbertitle', 'off');
@@ -64,16 +71,8 @@ subplot(s3)
 xlim([2 size(x_teo,2)])
 subplot(s4)
 xlim([2 size(x_teo,2)])
-
+%% Initialization
 %% EKF 
-
-% Test Both paths
-
-% figure(30);
-% plot(x_teo,y_teo)
-% hold on;
-% plot(x_teo1,y_teo1)
-
 
 IMU_data = [awgn(x_teo',15/0.0001,'measured','linear'),awgn(y_teo',15/0.0001,'measured','linear'),awgn(theta_teo',15/0.000001,'measured','linear')];
 x_new = zeros(size(IMU_data,1),1); x_new(1) = x_teo(1);
@@ -91,6 +90,8 @@ PEKF = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
 x_new_uEKF = zeros(size(IMU_data,1),1); x_new_uEKF(1) = x_teo(1);
 y_new_uEKF = zeros(size(IMU_data,1),1); y_new_uEKF(1) = y_teo(1);
 theta_new_uEKF = zeros(size(IMU_data,1),1); theta_new_uEKF(1) = theta_teo(1);
+
+% Covariance Estimation Initialization
 xunc = .01; 
 
 QUKF = eye(3).*0.00001;
@@ -105,8 +106,6 @@ actual_instance=1;
 x_newEKF_Matlab = zeros(size(IMU_data,1),1); x_newEKF_Matlab(1) = x_teo(1);
 y_newEKF_Matlab = zeros(size(IMU_data,1),1); y_newEKF_Matlab(1) = y_teo(1);
 theta_newEKF_Matlab = zeros(size(IMU_data,1),1); theta_newEKF_Matlab(1) = theta_teo(1);
-xunc = .01; % 
-yunc = .01; % 
 
 QEKF_Matlab = eye(2).*0.01;
 
@@ -119,18 +118,15 @@ x_pred = [x_newEKF_Matlab(1);y_newEKF_Matlab(1);theta_newEKF_Matlab(1)];
 x_newUKF_Matlab = zeros(size(IMU_data,1),1); x_newUKF_Matlab(1) = x_teo(1);
 y_newUKF_Matlab = zeros(size(IMU_data,1),1); y_newUKF_Matlab(1) = y_teo(1);
 theta_newUKF_Matlab = zeros(size(IMU_data,1),1); theta_newUKF_Matlab(1) = theta_teo(1);
-xunc = .01; % 
-yunc = .01; % 
 x_predUKF = [x_newUKF_Matlab(1);y_newUKF_Matlab(1);theta_newUKF_Matlab(1)];
 
 QUKF_Matlab = eye(2).*0.00001;
 RUKF_Matlab = eye(3).*0.000001;
 PUKF_Matlab = [xunc^2 0 0 ; 0 xunc^2 0 ;0 0 (xunc*0.01)^2];
 
-
-
- Acc_error_EKF = 0;
- Acc_error_UKF = 0;
+% Integral Error 
+Acc_error_EKF = 0;
+Acc_error_UKF = 0;
 %% Seting the timer
 my_timer = timer('TimerFcn','toc','StartFcn','tic','StartDelay',0.2);
 
@@ -181,7 +177,7 @@ while(true)
 
     % New measurements
     y_theory = [norm([x_teo(actual_instance) y_teo(actual_instance)]);atan2((y_teo(actual_instance)-y_teo(past_instance)),(x_teo(actual_instance)-x_teo(past_instance)))];
-    u = [y_theory(1)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1)];
+    u = [y_theory(1)*(10^(-5))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-5))*((rand(1,1) > 0.5)*2 - 1)];
     y = y_theory - y_hat + u;
     
     % Kalmans' Gain
@@ -199,7 +195,7 @@ while(true)
     % accumulating the error (the integral/sum does not let the system aforget about past deviations)
     Acc_error_EKF = Acc_error_EKF + (theta_teo(actual_instance)-theta_new(actual_instance));
     
-    %%%%%%%%%%%%% EXTENDED KALMAN FILTER %%%%%%%%%%%%%
+    %%%%%%%%%%%%% UNSCENTED KALMAN FILTER %%%%%%%%%%%%%
     
     %% Initialising measurement and process noise
     
@@ -227,16 +223,17 @@ while(true)
 
     L=3;                                 %numer of states
     m=2;                                 %numer of measurements
-    alpha=1e-3;                                 %default, tunable
-    ki=0;                                       %default, tunable
-    beta=2;                                     %default, tunable
-    lambda=3-L;                    %scaling factor
-    c=L+lambda;                                 %scaling factor
-    Wm=[lambda/c 0.5/c+zeros(1,2*L)];           %weights for means
+    alpha=1e-3;                          %default, tunable
+    ki=0;                                %default, tunable
+    beta=2;                              %default, tunable
+    lambda=3-L;                          %scaling factor
+    c=L+lambda;                          %scaling factor
+    Wm=[lambda/c 0.5/c+zeros(1,2*L)];    %weights for means
     Wc=Wm;
     Wc(1)=Wc(1)+(1-alpha^2+beta);    
     c=sqrt(c);
     
+    %% Prediction Step
     x_pos_uEKF = [x_new_uEKF(past_instance);y_new_uEKF(past_instance);theta_new_uEKF(past_instance)];
     xsigma_post=sigmas(x_pos_uEKF,PUKF,c);
     sum_group = zeros(3,1);
@@ -255,6 +252,7 @@ while(true)
     Deviations = pos_group - sum_group(:,ones(1,2*L+1));
     P_pos = Deviations*diag(Wc)*Deviations' + F*RUKF*F';
     
+    %% Update Step
     % Measurements
     sum_group_mea = zeros(2,1);
     pos_group_mea = zeros(2,2*L+1);    
@@ -270,8 +268,8 @@ while(true)
     P_mea = Deviations_mea*diag(Wc)*Deviations_mea' + H*QUKF*H';
 
     P12 = Deviations*diag(Wc)*Deviations_mea';
-    KUKF = P12*inv(P_mea);
-    u = [y_theory(1)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-4))*((rand(1,1) > 0.5)*2 - 1)];
+    KUKF = P12/P_mea;
+    u = [y_theory(1)*(10^(-5))*((rand(1,1) > 0.5)*2 - 1);y_theory(2)*(10^(-5))*((rand(1,1) > 0.5)*2 - 1)];
 
     aux = sum_group + KUKF*(y_theory-sum_group_mea + u); 
     PUKF = P_pos - KUKF*P12';
@@ -312,7 +310,7 @@ while(true)
     y_newEKF_Matlab(actual_instance) = x_pred(2);
     theta_newEKF_Matlab(actual_instance) = x_pred(3);
     
-    [x_predUKF, PUKF_Matlab] = predict(filterUKF,[x_teo(actual_instance);y_teo(actual_instance);theta_teo(actual_instance)],[x_teo(past_instance);y_teo(past_instance);theta_teo(past_instance)]);  
+    [x_predUKF, PUKF_Matlab] = predict(filterUKF,[x_teo(actual_instance);y_teo(actual_instance);theta_teo(actual_instance)],[x_teo(past_instance);y_teo(past_instance);theta_teo(past_instance)]);   %#ok<*ASGLU>
     x_newUKF_Matlab(actual_instance) = x_predUKF(1);
     y_newUKF_Matlab(actual_instance) = x_predUKF(2);
     theta_newUKF_Matlab(actual_instance) = x_predUKF(3);
@@ -431,3 +429,60 @@ function [x,y,theta, phi] = robot_simulation(x_k, y_k, theta_k, v, phi_k, w_phi)
     dtheta = (v/L)*tan(abs(phi_k));
     theta = theta_k+dtheta;
 end
+
+% Measurement Jacobian
+function H = mea_jacobian(x,x_old)
+    x_new = x(1);y_new=x(2);
+    x_new_old = x_old(1);y_new_old=x_old(2);
+
+    Norma =  norm([x_new y_new]);
+
+    H = [((x_new )/Norma) ((y_new )/Norma) 0; ...
+          ((-(y_new -y_new_old))/((x_new -x_new_old)^2 + (y_new -y_new_old)^2)) ((x_new -x_new_old)/((x_new -x_new_old)^2 + (y_new -y_new_old)^2)) 0];
+
+end
+% Measurement Model
+function z = measurement_Model(x,x_old)
+    x_new = x(1);y_new=x(2);
+    x_new_old = x_old(1);y_new_old=x_old(2);
+
+    %%%%%%%%%%%%% Measurements %%%%%%%%%%%%%
+
+    y_hat = [norm([x_new y_new]);atan2((y_new-y_new_old),(x_new-x_new_old))];
+
+    z = y_hat;
+    
+end
+
+% State Jacobian
+function F = state_jacobian(x,x_teoretical,x_teoretical_old)
+    x_teo = x_teoretical(1); y_teo=x_teoretical(2);
+    x_teo_old = x_teoretical_old(1); y_teo_old=x_teoretical_old(2); theta_new_old = x_teoretical_old(3);
+    
+
+    Norma = norm([x_teo y_teo]-[x_teo_old y_teo_old]);
+
+    F = [1 0 -Norma*sin(x(3));...
+         0 1 Norma*cos(x(3)); ...
+         0 0 1];
+
+    
+end
+
+% State Model
+function [xd] = State_Model(x,x_teoretical,x_teoretical_old)
+
+    x_teo = x_teoretical(1);y_teo = x_teoretical(2);
+    x_teo_old = x_teoretical_old(1);y_teo_old = x_teoretical_old(2);
+    %%%%%%%%%%%%% State Process %%%%%%%%%%%%%
+    
+    Norma = norm([x_teo y_teo]-[x_teo_old y_teo_old]);
+    xd(1) = x(1) + Norma*cos(x(3));
+    xd(2) = x(2) + Norma*sin(x(3));
+    xd(3) = x(3) + (x_teoretical(3) - x(3));
+    
+    xd = xd';
+    
+end
+
+
