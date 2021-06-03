@@ -1,14 +1,14 @@
 clear;
-close all;
+%close all;
 clearvars my_timer;
 clc;
 
 %% Paper - Performance Analysis of Real-Time Extended and Unscented Kalman Filters
 
 %%
-%  Data: 02/06/2021 - 2º Semestre 2020/2021
-% Alunos : João Almeida 90119, Rafael Cordeiro 90171
-% Docente : João Sequeira & Alberto Vale
+%  Data: 02/06/2021 - 2 Semestre 2020/2021
+% Alunos : Joao Almeida 90119, Rafael Cordeiro 90171
+% Docente : Joao Sequeira & Alberto Vale
 
 %% Graphical Interface
 
